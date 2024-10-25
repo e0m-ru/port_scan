@@ -19,6 +19,7 @@ func init() {
 	flag.IntVar(&workersCount, "w", 10000, "Determines the number of workers")
 	flag.IntVar(&portsCount, "p", int(math.Pow(2, 16)), `Defines the port range from 0 to N`)
 }
+
 func worker(ports, results chan int, address string) {
 	for p := range ports {
 		address := fmt.Sprintf(address, p)
