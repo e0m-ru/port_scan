@@ -15,15 +15,28 @@ func TestDashSplit(t *testing.T) {
 		t.Errorf("dashSplit(1-2) = %d; want []int{1,2}", ports)
 	}
 }
-func TestParse(t *testing.T) {
 
-	ports, err := Parse("1-3")
-	if err != nil {
-		t.Error(err)
+func TestParse(t *testing.T) {
+	type tt struct {
+		in  string
+		res []int
 	}
 
-	if slices.Compare(ports, []int{1, 2, 3}) != 0 {
-		t.Errorf("\nPortsRange:%v", ports)
+	ts := []tt{
+		{"1", []int{1}},
+		{"1-2", []int{1, 2}},
+		{"2-10", []int{2, 3, 4, 5, 6, 7, 8, 9, 10}},
+		{"2,10", []int{2, 10}},
+	}
+
+	for _, te := range ts {
+		ports, err := Parse(te.in)
+		if err != nil {
+			t.Error(err)
+		}
+		if slices.Compare(ports, te.res) != 0 {
+			t.Errorf("\nPortsRange:%v\nwant: %v", ports, te.res)
+		}
 	}
 
 }
