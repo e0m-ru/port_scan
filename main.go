@@ -5,19 +5,38 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
 	"sort"
 	"time"
 
-	"github.com/cheggaaa/pb/v3"
+	"e0m.ru/tcp_scaner/format"
+	"github.com/cheggaaa/pb"
 )
 
+const ()
+
 var (
-	workersCount, portsCount int
+	MAX_PORT          = int(math.Pow(2, 16)) - 1
+	defaultPortString = fmt.Sprintf("1-%d", MAX_PORT)
+	workersCount      int
+	portString        string
+	portsRange        []int
+	err               error
 )
 
 func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		fmt.Fprintf(flag.CommandLine.Output(), "\n")
+		flag.PrintDefaults()
+	}
 	flag.IntVar(&workersCount, "w", 10000, "Determines the number of workers")
-	flag.IntVar(&portsCount, "p", int(math.Pow(2, 16)), `Defines the port range from 0 to N`)
+	flag.StringVar(&portString, "p", defaultPortString, "Ports define like -p [`8080` || `1-1024` || `80,443,21,22`]")
+	flag.Parse()
+	portsRange, err = format.Parse(portString)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func worker(ports, results chan int, address string) {
@@ -33,11 +52,13 @@ func worker(ports, results chan int, address string) {
 		results <- p
 	}
 }
+
 func main() {
 
-	flag.Parse()
-	address := fmt.Sprint(flag.Arg(0) + ":%d")
-	fmt.Printf("%v\n", address)
+	address := fmt.Sprint(flag.Arg(0) + ":%v")
+
+	fmt.Printf(address, portString)
+
 	ports := make(chan int, workersCount)
 	results := make(chan int)
 	var openports []int
@@ -45,14 +66,14 @@ func main() {
 		go worker(ports, results, address)
 	}
 	go func() {
-		for i := 1; i <= portsCount; i++ {
+		for _, i := range portsRange {
 			ports <- i
 		}
 	}()
 
-	bar := pb.StartNew(portsCount)
+	bar := pb.StartNew(len(portsRange))
 
-	for i := 0; i < portsCount; i++ {
+	for range portsRange {
 		bar.Increment()
 		port := <-results
 		if port != 0 {
