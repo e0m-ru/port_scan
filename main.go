@@ -30,7 +30,7 @@ func init() {
 		fmt.Fprintf(flag.CommandLine.Output(), "\n")
 		flag.PrintDefaults()
 	}
-	flag.IntVar(&workersCount, "w", 1000, "Determines the number of workers (default 1000)")
+	flag.IntVar(&workersCount, "w", 100, "Determines the number of workers (default 100)")
 	flag.StringVar(&portString, "p", defaultPortString, "Ports define like -p [`8080` || `1-1024` || `80,443,21,22`]")
 	flag.Parse()
 	portsRange, err = format.Parse(portString)
