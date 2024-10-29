@@ -30,19 +30,23 @@ func init() {
 		fmt.Fprintf(flag.CommandLine.Output(), "\n")
 		flag.PrintDefaults()
 	}
-	flag.IntVar(&workersCount, "w", 10000, "Determines the number of workers")
+	flag.IntVar(&workersCount, "w", 1000, "Determines the number of workers (default 1000)")
 	flag.StringVar(&portString, "p", defaultPortString, "Ports define like -p [`8080` || `1-1024` || `80,443,21,22`]")
 	flag.Parse()
 	portsRange, err = format.Parse(portString)
 	if err != nil {
 		panic(err)
 	}
+	if flag.Arg(0) == "" {
+		fmt.Println("usage: tcp_scaner [-wp]... URL")
+		os.Exit(1)
+	}
 }
 
 func worker(ports, results chan int, address string) {
 	for p := range ports {
 		address := fmt.Sprintf(address, p)
-		d := net.Dialer{Timeout: time.Second}
+		d := net.Dialer{Timeout: time.Second * 3}
 		conn, err := d.Dial("tcp", address)
 		if err != nil {
 			results <- 0
@@ -56,9 +60,7 @@ func worker(ports, results chan int, address string) {
 func main() {
 
 	address := fmt.Sprint(flag.Arg(0) + ":%v")
-
 	fmt.Printf(address, portString)
-
 	ports := make(chan int, workersCount)
 	results := make(chan int)
 	var openports []int
@@ -80,6 +82,7 @@ func main() {
 			openports = append(openports, port)
 		}
 	}
+
 	bar.Finish()
 	close(ports)
 	close(results)
