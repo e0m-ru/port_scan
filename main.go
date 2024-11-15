@@ -4,12 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"net"
 	"os"
 	"sort"
-	"time"
 
 	"e0m.ru/tcp_scaner/format"
+	. "e0m.ru/tcp_scaner/loger"
 	"github.com/cheggaaa/pb"
 )
 
@@ -19,6 +18,7 @@ var (
 	MAX_PORT          = int(math.Pow(2, 16)) - 1
 	defaultPortString = fmt.Sprintf("1-%d", MAX_PORT)
 	workersCount      int
+	timeout           int
 	portString        string
 	portsRange        []int
 	err               error
@@ -30,35 +30,22 @@ func init() {
 		fmt.Fprintf(flag.CommandLine.Output(), "\n")
 		flag.PrintDefaults()
 	}
-	flag.IntVar(&workersCount, "w", 100, "Determines the number of workers (default 100)")
-	flag.StringVar(&portString, "p", defaultPortString, "Ports define like -p [`8080` || `1-1024` || `80,443,21,22`]")
+	flag.IntVar(&workersCount, "w", 100, "Determines the number of workers")
+	flag.IntVar(&timeout, "t", 1000, "Determines the timeout for connection in miliseconds")
+	flag.StringVar(&portString, "p", defaultPortString, "Ports define like -p [8080 || 1-1024 || 80,443,21,22]")
 	flag.Parse()
 	portsRange, err = format.Parse(portString)
 	if err != nil {
-		panic(err)
+		fmt.Printf("Can't parse port %v", portString)
+		L.Fatalf("Can't parse port %v", portString)
 	}
 	if flag.Arg(0) == "" {
-		fmt.Println("usage: tcp_scaner [-wp]... URL")
-		os.Exit(1)
-	}
-}
-
-func worker(ports, results chan int, address string) {
-	for p := range ports {
-		address := fmt.Sprintf(address, p)
-		d := net.Dialer{Timeout: time.Second * 3}
-		conn, err := d.Dial("tcp", address)
-		if err != nil {
-			results <- 0
-			continue
-		}
-		conn.Close()
-		results <- p
+		fmt.Println("Not enough parameter\nusage: tcp_scaner [-wpt]... URL")
+		os.Exit(0)
 	}
 }
 
 func main() {
-
 	address := fmt.Sprint(flag.Arg(0) + ":%v")
 	fmt.Printf(address, portString)
 	ports := make(chan int, workersCount)
