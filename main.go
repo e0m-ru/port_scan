@@ -3,25 +3,22 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math"
+	"log"
+	"net"
 	"os"
-	"sort"
-
-	"e0m.ru/tcp_scaner/format"
-	. "e0m.ru/tcp_scaner/loger"
-	"github.com/cheggaaa/pb"
+	"sync"
+	"time"
 )
 
-const ()
+const (
+	MAX_PORT = 65535
+)
 
 var (
-	MAX_PORT          = int(math.Pow(2, 16)) - 1
 	defaultPortString = fmt.Sprintf("1-%d", MAX_PORT)
 	workersCount      int
 	timeout           int
 	portString        string
-	portsRange        []int
-	err               error
 )
 
 func init() {
@@ -31,50 +28,73 @@ func init() {
 		flag.PrintDefaults()
 	}
 	flag.IntVar(&workersCount, "w", 100, "Determines the number of workers")
-	flag.IntVar(&timeout, "t", 1000, "Determines the timeout for connection in miliseconds")
-	flag.StringVar(&portString, "p", defaultPortString, "Ports define like -p [8080 || 1-1024 || 80,443,21,22]")
-	flag.Parse()
-	portsRange, err = format.Parse(portString)
-	if err != nil {
-		fmt.Printf("Can't parse port %v", portString)
-		L.Fatalf("Can't parse port %v", portString)
-	}
-	if flag.Arg(0) == "" {
-		fmt.Println("Not enough parameter\nusage: tcp_scaner [-wpt]... URL")
-		os.Exit(0)
-	}
+	flag.IntVar(&timeout, "t", 1000, "Determines the timeout for connection in milliseconds")
+	flag.StringVar(&portString, "p", defaultPortString, "Ports define like -p [8080 || 1-1024 || 1-80,443,21-22,4455]")
 }
 
 func main() {
-	address := fmt.Sprint(flag.Arg(0) + ":%v")
-	fmt.Printf(address, portString)
-	ports := make(chan int, workersCount)
-	results := make(chan int)
-	var openports []int
-	for i := 0; i < cap(ports); i++ {
-		go worker(ports, results, address)
+	// Parse flags
+	flag.Parse()
+
+	// Check arguments
+	if flag.Arg(0) == "" {
+		fmt.Println("Error: Missing target URL\nUsage: tcp_scaner [-wpt]... URL")
+		os.Exit(1)
 	}
+	target := flag.Arg(0)
+
+	// Parse port range
+	portsRange, err := ParsePortRanges(portString)
+	if err != nil {
+		log.Fatalf("Error parsing ports: %v", err)
+	}
+
+	var (
+		wg sync.WaitGroup
+	)
+
+	// Send ports to channel
+	ports := make(chan int, len(portsRange))
 	go func() {
-		for _, i := range portsRange {
-			ports <- i
+		for _, port := range portsRange {
+			ports <- port
 		}
+		close(ports)
 	}()
 
-	bar := pb.StartNew(len(portsRange))
-
-	for range portsRange {
-		bar.Increment()
-		port := <-results
-		if port != 0 {
-			openports = append(openports, port)
-		}
+	// Start workers
+	results := make(chan int)
+	if len(portsRange) < workersCount {
+		workersCount = len(portsRange)
+	}
+	for range workersCount {
+		wg.Add(1)
+		go worker(&wg, ports, results, target+":%d")
 	}
 
-	bar.Finish()
-	close(ports)
+	// Read results
+	go func() {
+		for port := range results {
+			if port != 0 {
+				fmt.Printf("%d ", port)
+			}
+		}
+	}()
+	wg.Wait()
 	close(results)
-	sort.Ints(openports)
-	for _, port := range openports {
-		fmt.Printf("%d open\n", port)
+}
+
+func worker(wg *sync.WaitGroup, ports, results chan int, address string) {
+	d := net.Dialer{Timeout: time.Millisecond * time.Duration(timeout)}
+	defer wg.Done()
+	for p := range ports {
+		address := fmt.Sprintf(address, p)
+		conn, err := d.Dial("tcp", address)
+		if err != nil {
+			results <- 0
+			continue
+		}
+		conn.Close()
+		results <- p
 	}
 }
